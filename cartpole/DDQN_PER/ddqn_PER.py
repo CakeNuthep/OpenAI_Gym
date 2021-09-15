@@ -13,20 +13,20 @@ import random
 from Memory import *
 
 class Agent():
-	def __init__(self,path_neural_network=None,path_target_model=None):
+	def __init__(self,env,path_neural_network=None,path_target_model=None):
 		# self.memory = deque(maxlen=1000000)
 		self.memory = Memory(1000000)  # PER Memory
 		self.batch_size = 64
 
-		
+		self.env = env
 		self.learning_rate = 0.001
 		self.discount_factor = 0.95
 		self.epsilon = 0.5
 		self.decay_factor = 0.999
 		self.TAU = 0.5
 		self.reward_for_each_episode = []
-		self.neural_network = NeuralNetwork(4,2,self.learning_rate)
-		self.target_model = NeuralNetwork(4,2,self.learning_rate)
+		self.neural_network = NeuralNetwork(self.env.observation_space.shape[0],self.env.action_space.n,self.learning_rate)
+		self.target_model = NeuralNetwork(self.env.observation_space.shape[0],self.env.action_space.n,self.learning_rate)
 		if path_neural_network != None:
 			self.neural_network.load_weights(path_neural_network)
 		if path_target_model != None:
@@ -34,11 +34,11 @@ class Agent():
 
 		
 
-	def play(self, env, number_of_episode=500, isRender = False,isTrain = True):
+	def play(self, number_of_episode=500, isRender = False,isTrain = True):
 		max_total_reward = -200
 		for i_episode in range(number_of_episode):
 			#print("Episode {} of {}".format(i_episode + 1, number_of_episode))
-			state = env.reset()
+			state = self.env.reset()
 			state = np.reshape(state,[1,4])
 			
 			total_reward = 0
@@ -46,12 +46,12 @@ class Agent():
 			end_game = False
 			while not end_game:
 				if isRender:
-					env.render()
+					self.env.render()
 				if self.__probability(self.epsilon):
-					action = self.__getActionByRandomly(env)
+					action = self.__getActionByRandomly()
 				else:
 					action = self.__getActionWithHighestExpectedReward(state)
-				new_state, reward, end_game, _ = env.step(action)
+				new_state, reward, end_game, _ = self.env.step(action)
 				new_state = np.reshape(new_state,[1,4])
 				if end_game:
 					reward = -200
@@ -77,8 +77,8 @@ class Agent():
 	def __probability(self, probability):
 		return np.random.random() < probability
 
-	def __getActionByRandomly(self, env):
-		return env.action_space.sample()
+	def __getActionByRandomly(self):
+		return self.env.action_space.sample()
 
 	def __getActionWithHighestExpectedReward(self, state):
 		return np.argmax(self.neural_network.predict_expected_rewards_for_each_action(state)[0])
@@ -100,7 +100,7 @@ class Agent():
 		batch, idxs, is_weight = self.memory.sample(self.batch_size)
 
 
-		state_size = 4
+		state_size = self.env.observation_space.shape[0]
 		list_state = np.zeros((self.batch_size,state_size))
 		list_next_state = np.zeros((self.batch_size, state_size))
 		list_action, list_reward, list_done = [],[],[]
