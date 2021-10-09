@@ -1,5 +1,5 @@
 import gym
-from PG_CNN_test import Agent
+from PG_CNN import Agent
 
 env = gym.make('CartPole-v1')
 

@@ -1,6 +1,6 @@
 import gym
 import matplotlib.pyplot as plt
-from PG_CNN_test import Agent
+from PG_CNN import Agent
 
 env = gym.make('CartPole-v1')
 
