@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
+import cv2
 
 # Configuration parameters for the whole setup
 seed = 42
@@ -22,12 +23,31 @@ an estimate of total rewards in the future.
 In our implementation, they share the initial layer.
 """
 
-num_inputs = 4
+
 num_actions = 2
 num_hidden = 128
 
-inputs = layers.Input(shape=(num_inputs,))
-common = layers.Dense(num_hidden, activation="relu")(inputs)
+REM_STEP = 4
+ROWS = 160
+COLS = 240
+image_memory = np.zeros((ROWS, COLS,REM_STEP))
+state_size = (ROWS, COLS,REM_STEP)
+
+inputs = layers.Input(shape=state_size)
+net = layers.Conv2D(64, 5, strides=(3, 3),padding="valid", activation="relu", data_format="channels_last")(inputs)
+net = layers.Conv2D(64, 4, strides=(2, 2),padding="valid", activation="relu", data_format="channels_last")(net)
+net = layers.Conv2D(64, 3, strides=(1, 1),padding="valid", activation="relu", data_format="channels_last")(net)
+# self.add(Conv2D(64, 5, strides=(3, 3),padding="valid", input_shape=input_shape, activation="relu", data_format="channels_last"))
+# self.add(Conv2D(64, 4, strides=(2, 2),padding="valid", activation="relu", data_format="channels_last"))
+# self.add(Conv2D(64, 3, strides=(1, 1),padding="valid", activation="relu", data_format="channels_last"))
+# self.add(Flatten(input_shape=input_shape))
+# self.add(Dense(24,activation="relu",kernel_initializer='he_uniform',name="layer1"))
+# self.add(Dense(24,activation="relu",kernel_initializer='he_uniform',name="layer2"))
+# self.add(Dense(action_space, activation="softmax", kernel_initializer='he_uniform'))
+
+net = layers.Flatten()(net)
+
+common = layers.Dense(num_hidden, activation="relu")(net)
 action = layers.Dense(num_actions, activation="softmax")(common)
 critic = layers.Dense(1)(common)
 
@@ -37,7 +57,7 @@ model = keras.Model(inputs=inputs, outputs=[action, critic])
 ## Train
 """
 
-optimizer = keras.optimizers.Adam(learning_rate=0.01)
+optimizer = keras.optimizers.Adam(learning_rate=0.00000001)
 huber_loss = keras.losses.Huber()
 action_probs_history = []
 critic_value_history = []
@@ -45,8 +65,45 @@ rewards_history = []
 running_reward = 0
 episode_count = 0
 
+
+def imshow(image, rem_step=0):
+    cv2.imshow(str(rem_step), image[...,rem_step])
+    if cv2.waitKey(25) & 0xFF == ord("q"):
+        cv2.destroyAllWindows()
+        return
+
+def GetImage():
+    img = env.render(mode='rgb_array')
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    img_rgb_resized = cv2.resize(img_rgb, (COLS, ROWS), interpolation=cv2.INTER_CUBIC)
+    img_rgb_resized[img_rgb_resized < 255] = 0
+    img_rgb_resized = img_rgb_resized / 255
+    
+
+    image_memory_roll = np.roll(image_memory, 1, axis = 2)
+    image_memory[:,:,0] = img_rgb_resized
+    image_memory[:,:,1] = image_memory_roll[:,:,1]
+    image_memory[:,:,2] = image_memory_roll[:,:,2]
+    image_memory[:,:,3] = image_memory_roll[:,:,3]
+    
+    # show image frame   
+    #self.imshow(self.image_memory,0)
+    
+    return np.expand_dims(image_memory, axis=0)
+
+def reset():
+    env.reset()
+    for i in range(REM_STEP):
+        state = GetImage()
+    return state
+
+def step(action):
+    next_state, reward, done, info = env.step(action)
+    next_state = GetImage()
+    return next_state, reward, done, info
+
 while True:  # Run until solved
-    state = env.reset()
+    state = reset()
     episode_reward = 0
     with tf.GradientTape() as tape:
         for timestep in range(1, max_steps_per_episode):
@@ -66,7 +123,7 @@ while True:  # Run until solved
             action_probs_history.append(tf.math.log(action_probs[0, action]))
 
             # Apply the sampled action in our environment
-            state, reward, done, _ = env.step(action)
+            state, reward, done, _ = step(action)
             rewards_history.append(reward)
             episode_reward += reward
 
